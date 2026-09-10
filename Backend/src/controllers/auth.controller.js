@@ -1,3 +1,4 @@
+import { sendWelcomeEmail } from "../../email/emailHandlers.js"
 import { generateToken } from "../libs/utils.js"
 import User from "../models/User.model.js"
 import bcrypt from "bcryptjs"
@@ -20,7 +21,7 @@ export const SignUp = async (req, res) => {
         if (!regexEmail.test(email)) {
             return res.status(400).json({ message: "Invalid email format" })
         }
-        const user = await User.findOne(email)
+        const user = await User.findOne({email:email})
         if (user) return res.status(400).json({ message: "Email already exists" })
         const salt = await bcrypt.genSalt(10)
         const hashedPasword = await bcrypt.hash(password, salt)
@@ -31,8 +32,8 @@ export const SignUp = async (req, res) => {
             password: hashedPasword
         })
         if (newUser) {
+            const savedUser= await newUser.save()
             generateToken(newUser._id, res)
-            await newUser.save()
 
             res.status(201).json({
                 _id: newUser._id,
@@ -40,6 +41,12 @@ export const SignUp = async (req, res) => {
                 email: newUser.email,
                 profilePic: newUser.profilePic,
             })
+            try {
+                await sendWelcomeEmail(savedUser.email, savedUser.fullName,process.env.CLIENT_URL)
+            } catch (error) {
+                console.error("Failde to send welcome email:",error);
+                
+            }
         } else {
             res.status(400).json({ message: "Invalid user data" })
         }
