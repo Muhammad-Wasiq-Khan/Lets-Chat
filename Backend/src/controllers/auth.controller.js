@@ -1,7 +1,9 @@
 import { sendWelcomeEmail } from "../../email/emailHandlers.js"
+import { ENV } from "../libs/env.js"
 import { generateToken } from "../libs/utils.js"
 import User from "../models/User.model.js"
 import bcrypt from "bcryptjs"
+import cloudinary from "../libs/Cloudinary.js"
 
 export const SignUp = async (req, res) => {
     const { fullName, email, password } = req.body
@@ -21,7 +23,7 @@ export const SignUp = async (req, res) => {
         if (!regexEmail.test(email)) {
             return res.status(400).json({ message: "Invalid email format" })
         }
-        const user = await User.findOne({email:email})
+        const user = await User.findOne({ email: email })
         if (user) return res.status(400).json({ message: "Email already exists" })
         const salt = await bcrypt.genSalt(10)
         const hashedPasword = await bcrypt.hash(password, salt)
@@ -32,7 +34,7 @@ export const SignUp = async (req, res) => {
             password: hashedPasword
         })
         if (newUser) {
-            const savedUser= await newUser.save()
+            const savedUser = await newUser.save()
             generateToken(newUser._id, res)
 
             res.status(201).json({
@@ -42,16 +44,70 @@ export const SignUp = async (req, res) => {
                 profilePic: newUser.profilePic,
             })
             try {
-                await sendWelcomeEmail(savedUser.email, savedUser.fullName,process.env.CLIENT_URL)
+                await sendWelcomeEmail(savedUser.email, savedUser.fullName, ENV.CLIENT_URL)
             } catch (error) {
-                console.error("Failde to send welcome email:",error);
-                
+                console.error("Failed to send welcome email:", error);
+
             }
         } else {
             res.status(400).json({ message: "Invalid user data" })
         }
     } catch (error) {
-        console.error("Error in SingUp controller:",error);
-        res.status(500).json({message:"Internal server error"})
+        console.error("Error in SignUp controller:", error);
+        res.status(500).json({ message: "Internal server error" })
+    }
+}
+
+export const Login = async (req, res) => {
+    const { email, password } = req.body
+    if (!email || !password) {
+        return res.status(400).json({ message: "Email and Password is required." })
+    }
+    try {
+        const user = await User.findOne({ email: email })
+        if (!user) {
+            return res.status(400).json({ message: "Invalid credentials" })
+        }
+
+        const isPasswordCorrect = await bcrypt.compare(password, user.password)
+        if (!isPasswordCorrect) {
+            return res.status(400).json({ message: "Invalid Credentials" })
+        }
+
+        generateToken(user._id, res)
+
+        res.status(200).json({
+            _id: user._id,
+            fullName: user.fullName,
+            email: user.email,
+            profilePic: user.profilePic,
+        })
+    } catch (error) {
+        console.error("Error in login controller:", error);
+        res.status(500).json({ message: "Internal Server Error" })
+    }
+}
+
+export const Logout = (_, res) => {
+    res.cookie("jwt", "", { maxAge: 0 })
+    res.status(200).json({ message: "Logged out successfully" })
+}
+
+export const updateProfile = async (req, res) => {
+    try {
+        const { profilePic } = req.body;
+        if (!profilePic) {
+            return res.status(400).json({ message: "Profile Pic is required" })
+        }
+        const userId = req.user._id
+
+        const uploadResponse = await cloudinary.uploader.upload(profilePic)
+
+        const updatedUser = await User.findByIdAndUpdate(userId, { profilePic: uploadResponse.secure_url }, { new: true }).select("-password")
+
+        res.status(200).json(updatedUser)
+    } catch (error) {
+        console.error("Error in updateProfile  controller:", error);
+        res.status(500).json({ message: "Internal Server Error" })
     }
 }
