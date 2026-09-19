@@ -17,7 +17,7 @@ app.use(express.json())
 app.use(cookieParser())
 
 app.use("/api/auth", authRoutes)
-app.use("/api/messages", messagesRoutes)
+app.use("/api/message", messagesRoutes)
 
 if (ENV.NODE_ENV === "production") {
     app.use(express.static(path.join(__dirname, "../Frontend/dist")))
