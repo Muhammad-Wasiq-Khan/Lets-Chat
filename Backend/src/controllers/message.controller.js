@@ -40,6 +40,19 @@ export const sendMessage = async (req, res) => {
         const { id: receiverId } = req.params
         const senderId = req.user._id
 
+        if (!text && !image) {
+            res.status(400).json({message:"Text or image is required"})
+        }
+
+        if (senderId.equals(receiverId)) {
+            res.status(400).json({message:"You can't send message to yourself."})
+        }
+
+        const receiverFound= await User.exists({_id:receiverId})
+        if (!receiverFound) {
+            res.status(400).json({message:"User dosen't exist."})
+        }
+        
         let imageUrl
         if (image) {
             const uploadImage = await cloudinary.uploader.upload(image)
@@ -59,6 +72,32 @@ export const sendMessage = async (req, res) => {
 
     } catch (error) {
         console.log("Error in sendMessages:", error);
-        res.status(500).json({ message: "Internal Server Error",error })
+        res.status(500).json({ message: "Internal Server Error", error })
     }
+}
+
+export const getChatPartners = async (req, res) => {
+    try {
+        const myId = req.user._id
+
+        const message = await Message.find({
+            $or: [{ senderId: myId }, { receiverId: myId }]
+        })
+
+        const chatPartnerIds = [
+            ...new Set(
+                message.map((msg) =>
+                    msg.senderId.toString() === myId.toString() ? msg.receiverId.toString() : msg.senderId.toString()
+                )
+            )
+        ]
+
+        const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password")
+        res.status(200).json(chatPartners)
+
+    } catch (error) {
+        console.log("Error in getChatPartners:", error);
+        res.status(500).json({ message: "Internal Server Error", error })
+    }
+
 }
